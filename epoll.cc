@@ -82,7 +82,6 @@ void EpollServer::EventLoop()
 
 void EpollServer::RemoveConnect(int fd)
 {
-  //close(fd);
   Epoll_Op(fd, 0, EPOLL_CTL_DEL);
   auto it = _fdConnectMap.find(fd);
   if(it != _fdConnectMap.end())
@@ -100,7 +99,7 @@ void EpollServer::RemoveConnect(int fd)
   }
 
 }
-void EpollServer::Forwarding(int clientfd, int serverfd) //转发数据
+void EpollServer::Forwarding(int clientfd, int serverfd, bool sendencry, bool recvdecrypt) //转发数据
 {
   char buf[4096] = {0};
   int rlen = recv(clientfd, buf, 4096, 0);
@@ -116,6 +115,11 @@ void EpollServer::Forwarding(int clientfd, int serverfd) //转发数据
   }
   else 
   {
+    if(sendencry)
+     Encry(buf, rlen); 
+    if(recvdecrypt)
+      Decrypt(buf, rlen);
+
     buf[rlen] = '\0';
     Send_Loop(serverfd, buf, rlen);
   }

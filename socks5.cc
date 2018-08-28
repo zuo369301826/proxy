@@ -13,6 +13,7 @@ int Socks5Server::AuthHandle(int fd)//身份验证
   {
     
     recv(fd, buf, size, 0);
+    Decrypt(buf, size);
 
     if(buf[0] != 0x05) // 版本号不正确
     {
@@ -28,7 +29,8 @@ int  Socks5Server::EstablishmentHandle(int fd)//建立连接
 {
   char buf[256];// 版本号（1） CMD（1） RSV（1） ATYP(1)  服务端地址(变量)  端口号（2）  6 + 变量(最大63)
   int size = recv(fd, buf, 256, MSG_PEEK);
-  if(size < 0)
+
+  if(size <= 0)
   {
     return -1;
   }
@@ -43,22 +45,30 @@ int  Socks5Server::EstablishmentHandle(int fd)//建立连接
 
     //先读出前4字节
     recv(fd, buf, 4, 0);
+  Decrypt(buf, 4);
     char addr_type = buf[3];
     if(addr_type == 0x01) //ipv4
     {
       recv(fd, ip, 4, 0);//获取ip
+  Decrypt(ip, 4);
       recv(fd, port, 2, 0);//获取port
+  Decrypt(port, 2);
     }
     else if(addr_type == 0x03)//domainname
     {
       char len = 0;
       recv(fd, &len, 1, 0); // 读取长度
-      recv(fd, buf, len, 0); //读取域名
+  Decrypt(&len, 1);
+      
+      recv(fd, buf, len, 0); //读取域名    
       buf[len] = '\0';
+  Decrypt(buf, len);
+
       struct hostent* hostptr = gethostbyname(buf);
       memcpy(ip, hostptr->h_addr, hostptr->h_length);
      
       recv(fd, port, 2, 0);//获取端口号
+  Decrypt(port, 2);
 
       TraceLog("domainname:%s",buf);  //打印要连接的域名
     }
@@ -123,9 +133,10 @@ void  Socks5Server::ReadEpollEvent(int connectfd)// 读事件
       else if(ret == -1)
       {
         reply[1] = 0xFF;
-        RemoveConnect(connectfd);//删除文件描述符和管道
+        RemoveConnect(connectfd);//删除管道
       }
 
+      Encry(reply, 2);
       if(send(connectfd, reply, 2, 0) != 2)
       {
         ErrorLog("auth reply");
@@ -155,6 +166,7 @@ void  Socks5Server::ReadEpollEvent(int connectfd)// 读事件
         reply[3] = 0x01;//表示 ipv4 
       }
 
+      Encry(reply, 10);
       if(send(connectfd, reply, 10, 0) != 10)
       {
         ErrorLog("establishment reply");
@@ -176,12 +188,14 @@ void  Socks5Server::ReadEpollEvent(int connectfd)// 读事件
       Channel* clientChannel = &con->_clientChannel;
       Channel* serverChannel = &con->_serverChannel;
 
+      bool sendencry = false, recvdecrypt = true;
       if(connectfd == serverChannel->fd)
       {
         swap(clientChannel, serverChannel);
+        swap(sendencry, recvdecrypt);        
       }
 
-      Forwarding(clientChannel->fd, serverChannel->fd); 
+      Forwarding(clientChannel->fd, serverChannel->fd,sendencry, recvdecrypt); 
     }
      
     else 

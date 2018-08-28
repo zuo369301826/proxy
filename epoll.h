@@ -1,5 +1,17 @@
 #pragma once
 #include "common.h"
+#include "encry.h"
+
+class Pipe{
+  public:
+    Pipe()
+    {
+      signal(SIGPIPE, SIG_IGN);
+    }
+};
+static Pipe initPipe;
+
+
 class EpollServer
 {
   public:
@@ -77,7 +89,7 @@ class EpollServer
     void EventLoop();//设置epoll
 
     void RemoveConnect(int fd); //删除文件描述符 和 管道
-    void Forwarding(int connectfd, int serverfd); //转发数据
+    void Forwarding(int connectfd, int serverfd, bool sendencry, bool recvdecrypt); //转发数据
     void Send_Loop(int fd, const char* buf, int len); //循环发送
   protected:
     int _port; //端口号

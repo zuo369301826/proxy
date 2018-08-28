@@ -49,8 +49,7 @@ void TranferServer::ReadEpollEvent(int connectfd)
       swap(sendencry, recvdecrypt);
     }
 
-    Forwarding(clientChannel->fd, serverChannel->fd);
-
+    Forwarding(clientChannel->fd, serverChannel->fd,sendencry, recvdecrypt);
   }
   else 
   {
