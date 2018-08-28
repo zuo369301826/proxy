@@ -5,7 +5,7 @@
 class Socks5Server: public EpollServer
 {
   public:
-    Sock5Server(int port)
+    Socks5Server(int port)
       :EpollServer(port)
     {}
 

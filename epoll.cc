@@ -17,7 +17,7 @@ void EpollServer::Start()
   addr.sin_family = AF_INET;
   addr.sin_port = htons(_port);
   addr.sin_addr.s_addr = htonl(INADDR_ANY);
-  if(bind(_listenfd, (sockaddr*)&addr, sizeof addr) < 0)
+  if(bind(_listenfd, (struct sockaddr*)&addr, sizeof addr) < 0)
   {
     ErrorLog("bind socket");
     return ;
@@ -40,6 +40,7 @@ void EpollServer::Start()
 
   //设置监听描述符
   SetNonblockint(_listenfd);
+
   //添加读事件
   Epoll_Op(_listenfd, EPOLLIN, EPOLL_CTL_ADD);
 
@@ -79,8 +80,95 @@ void EpollServer::EventLoop()
     }
 }
 
-void EpollServer::WriteEpollEvent(int connectfd)
+void EpollServer::RemoveConnect(int fd)
 {
+  //close(fd);
+  Epoll_Op(fd, 0, EPOLL_CTL_DEL);
+  auto it = _fdConnectMap.find(fd);
+  if(it != _fdConnectMap.end())
+  {
+    auto* con = it->second;
+    if(--con->_ref == 0)
+    {
+      delete con;
+      _fdConnectMap.erase(it);
+    }
+  }
+  else 
+  {
+    assert(false);
+  }
 
+}
+void EpollServer::Forwarding(int clientfd, int serverfd) //转发数据
+{
+  char buf[4096] = {0};
+  int rlen = recv(clientfd, buf, 4096, 0);
+
+  if(rlen <  0)
+  {
+    ErrorLog("recv : %d", clientfd);
+  }
+  else if(rlen == 0)
+  {
+    shutdown(serverfd, SHUT_WR);
+    RemoveConnect(clientfd);
+  }
+  else 
+  {
+    buf[rlen] = '\0';
+    Send_Loop(serverfd, buf, rlen);
+  }
+}
+
+//循环发送
+void EpollServer::Send_Loop(int fd, const  char* buf, int len)
+{
+  int slen = send(fd, buf, len, 0);
+  if(slen < 0)
+  {
+    ErrorLog("send to %d", fd);
+  }
+  else if(slen < len)
+  {
+    TraceLog("recv %d bytes, send %d bytes, left %d send in loop", len, slen, len-slen);
+    auto it = _fdConnectMap.find(fd);
+    if(it != _fdConnectMap.end())
+    {
+      Connect* con = it->second;
+      Channel* channel = &con->_clientChannel;
+      if(fd == con->_serverChannel.fd)
+      {
+        channel = &con->_serverChannel;
+      }
+
+      int events = EPOLLOUT | EPOLLIN || EPOLLONESHOT;
+      Epoll_Op(fd, events, EPOLL_CTL_MOD);
+      channel->buff.append(buf+slen);
+    }
+    else
+    {
+      assert(false);
+    }
+  }
+
+}
+
+void EpollServer::WriteEpollEvent(int fd)
+{
+  auto it = _fdConnectMap.find(fd);
+  if(it != _fdConnectMap.end())
+  {
+    Connect* con = it->second;
+    Channel* channel = &con->_clientChannel;
+    if(fd == con->_serverChannel.fd)
+    {
+      channel = &con->_serverChannel;
+    }
+
+    string buff;
+    buff.swap(channel->buff);
+    Send_Loop(fd, buff.c_str(), buff.size());
+  }
 }
 

@@ -1,6 +1,5 @@
 #pragma once
 #include "common.h"
-
 class EpollServer
 {
   public:
@@ -43,6 +42,7 @@ class EpollServer
     struct Channel
     {
       int fd;
+      string buff;
       Channel()
         :fd(-1)
       {}
@@ -76,10 +76,15 @@ class EpollServer
     void Start();//服务器启动函数
     void EventLoop();//设置epoll
 
-  private:
+    void RemoveConnect(int fd); //删除文件描述符 和 管道
+    void Forwarding(int connectfd, int serverfd); //转发数据
+    void Send_Loop(int fd, const char* buf, int len); //循环发送
+  protected:
     int _port; //端口号
     int _listenfd; //监听套接字 
     int _eventfd; //事件描述符
+  
+    unordered_map<int, Connect*> _fdConnectMap;
 
     static const size_t _MAX_EVENTS; //最大文件描述符
 };
